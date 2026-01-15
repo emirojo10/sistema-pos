@@ -37,6 +37,8 @@
         <div id="adminPanel" class="hidden mb-4 grid grid-cols-2 gap-2">
             <button onclick="window.verStaff()" class="bg-amber-600/10 border border-amber-600/30 text-amber-500 p-3 rounded-2xl font-black text-[10px] uppercase">⚙️ Staff</button>
             <button onclick="window.verLogs()" class="bg-purple-600/10 border border-purple-600/30 text-purple-400 p-3 rounded-2xl font-black text-[10px] uppercase">📋 Logs</button>
+            <button onclick="window.verMetricas()" class="bg-blue-600/10 border border-blue-600/30 text-blue-400 p-3 rounded-2xl font-black text-[10px] uppercase">📊 Métricas</button>
+            <button onclick="window.verStockCritico()" class="bg-red-600/10 border border-red-600/30 text-red-500 p-3 rounded-2xl font-black text-[10px] uppercase">⚠️ Stock Crítico</button>
         </div>
 
         <div id="containerPrincipal" class="bg-slate-900 rounded-[2.5rem] p-6 border border-slate-800 shadow-2xl transition-all duration-300">
@@ -109,7 +111,12 @@
         let scanner = null;
 
         const crearHeader = (titulo) => `<div class="modal-header-fixed flex justify-between items-center"><h3 class="text-lg font-black uppercase italic text-blue-500">${titulo}</h3><button onclick="window.cerrarModal()" class="bg-red-600 text-white w-8 h-8 rounded-full font-black flex items-center justify-center">✕</button></div>`;
-        window.cerrarModal = () => { document.getElementById('modalUniversal').classList.add('hidden'); if(scanner) { scanner.stop(); scanner = null; } };
+        
+        window.cerrarModal = () => { 
+            document.getElementById('modalUniversal').classList.add('hidden'); 
+            if(scanner) { scanner.stop(); scanner = null; } 
+        };
+        
         window.logout = () => location.reload();
 
         window.intentarLogin = async () => {
@@ -127,7 +134,6 @@
             } else { alert("PIN INCORRECTO"); }
         };
 
-        // --- FINALIZAR (FOLIOS + ÚLTIMA VENTA) ---
         window.finalizar = async () => {
             if(!listaActual.length) return alert("LISTA VACÍA");
             const hoy = new Date().toISOString().split('T')[0];
@@ -160,7 +166,6 @@
             } catch (e) { alert("ERROR"); }
         };
 
-        // --- CIERRE DE CAJA MEJORADO (AUDITORÍA PROFESIONAL) ---
         window.verCierre = async () => {
             const hoy = new Date().toISOString().split('T')[0];
             const q = query(collection(db, "ventas"), where("fechaSimple", "==", hoy));
@@ -200,20 +205,17 @@
                         <p class="text-xl font-black text-white">$${stats.tBruto.toLocaleString()}</p>
                     </div>
                 </div>
-
                 <div class="bg-slate-800/20 p-4 rounded-2xl border border-slate-800 space-y-2">
                     <div class="flex justify-between text-[10px] font-bold"><span>💵 EFECTIVO</span><span class="text-white">$${stats.Efectivo.toLocaleString()}</span></div>
                     <div class="flex justify-between text-[10px] font-bold"><span>💳 TARJETA</span><span class="text-white">$${stats.Tarjeta.toLocaleString()}</span></div>
                     <div class="flex justify-between text-[10px] font-bold"><span>📲 TRANSF.</span><span class="text-white">$${stats.Transferencia.toLocaleString()}</span></div>
                     <div class="flex justify-between text-[10px] font-bold text-red-500 border-t border-slate-800 pt-2"><span>📉 RETIROS (${stats.cRetiros})</span><span>-$${stats.Retiros.toLocaleString()}</span></div>
                 </div>
-
                 <div class="bg-green-600/10 p-4 rounded-3xl border border-green-600/30 text-center">
                     <p class="text-[9px] text-green-500 font-black uppercase tracking-widest">Efectivo Real en Caja</p>
                     <p class="text-4xl font-black text-green-500 italic">$${totalCajaEfectivo.toLocaleString()}</p>
                 </div>
             </div>
-
             <button id="btnD" class="w-full bg-slate-700 py-4 rounded-2xl font-black uppercase text-[10px] mb-2">Descargar Reporte CSV</button>
             <button onclick="window.compartirCierre('${hoy}', ${stats.tBruto}, ${totalCajaEfectivo}, ${stats.cVentas})" class="w-full bg-green-600 py-4 rounded-2xl font-black uppercase text-[10px]">Enviar Resumen WhatsApp</button>
             `;
@@ -231,7 +233,6 @@
             window.open(`https://wa.me/?text=${txt}`);
         };
 
-        // --- STOCK CON ANTIGÜEDAD ---
         window.verStock = async () => {
             const snap = await getDocs(collection(db, "productos"));
             let prods = [];
@@ -257,7 +258,6 @@
             document.getElementById('modalUniversal').classList.remove('hidden');
         };
 
-        // --- FUNCIONES CORE (SIN CAMBIOS) ---
         window.setModo = (m) => {
             modo = m; listaActual = []; window.render();
             const cont = document.getElementById('containerPrincipal');
@@ -397,7 +397,67 @@
         window.quitar = (i) => { listaActual.splice(i,1); window.render(); };
         window.startCamera = () => { document.getElementById('cameraSection').classList.remove('hidden'); scanner = new Html5Qrcode("reader"); scanner.start({facingMode:"environment"},{fps:15,qrbox:250}, async (c)=>{ const id=c.trim(); const d=await getDoc(doc(db,"productos",id)); if(d.exists()) window.seleccionar(id); else window.crearNuevoP(id); window.cerrarModal(); }); };
         async function registrarLog(accion) { if(userActivo) await setDoc(doc(db, "logs", "L_"+Date.now()), { usuario: userActivo.nombre, accion, fecha: Timestamp.now() }); }
-        
+
+        // --- NUEVAS FUNCIONES DE ANÁLISIS ---
+        window.verMetricas = async () => {
+            const hoy = new Date();
+            const mesActual = hoy.getMonth();
+            const snap = await getDocs(collection(db, "ventas"));
+            let mStats = { Efectivo: 0, Tarjeta: 0, Transferencia: 0, total: 0 };
+            
+            snap.forEach(d => {
+                const v = d.data();
+                const vFecha = v.fecha.toDate();
+                if(vFecha.getMonth() === mesActual && v.metodo !== 'RETIRO' && v.metodo !== 'CARGA_STOCK') {
+                    mStats.total += v.total;
+                    if(mStats[v.metodo] !== undefined) mStats[v.metodo] += v.total;
+                }
+            });
+
+            let h = crearHeader("Métricas del Mes");
+            h += `
+            <div class="space-y-4">
+                <div class="bg-blue-600/20 p-6 rounded-[2rem] border border-blue-600/30 text-center">
+                    <p class="text-[10px] text-blue-400 font-black uppercase tracking-widest mb-1">Total Facturado</p>
+                    <p class="text-4xl font-black text-white italic">$${mStats.total.toLocaleString()}</p>
+                </div>
+                <div class="grid grid-cols-1 gap-2">
+                    <div class="flex justify-between p-3 bg-slate-800/40 rounded-xl border border-slate-800 text-xs font-bold"><span>Efectivo</span><span>$${mStats.Efectivo.toLocaleString()}</span></div>
+                    <div class="flex justify-between p-3 bg-slate-800/40 rounded-xl border border-slate-800 text-xs font-bold"><span>Tarjeta</span><span>$${mStats.Tarjeta.toLocaleString()}</span></div>
+                    <div class="flex justify-between p-3 bg-slate-800/40 rounded-xl border border-slate-800 text-xs font-bold"><span>Transf.</span><span>$${mStats.Transferencia.toLocaleString()}</span></div>
+                </div>
+            </div>`;
+            document.getElementById('modalContent').innerHTML = h;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+        };
+
+        window.verStockCritico = async () => {
+            const snap = await getDocs(collection(db, "productos"));
+            let criticos = [];
+            snap.forEach(d => {
+                const p = d.data();
+                if(p.stock <= 5 && !p.nombre.startsWith("S-")) criticos.push({id: d.id, ...p});
+            });
+            criticos.sort((a,b) => a.stock - b.stock);
+
+            let h = crearHeader("Stock Crítico");
+            h += `<div class="space-y-2 mb-4">`;
+            criticos.forEach(p => {
+                h += `<div class="p-3 bg-red-600/10 border border-red-600/30 rounded-xl flex justify-between items-center">
+                    <div><p class="text-[10px] font-black uppercase text-white">${p.nombre}</p><p class="text-[8px] font-mono text-slate-500">${p.id}</p></div>
+                    <span class="bg-red-600 text-white px-3 py-1 rounded-lg font-black text-xs">${p.stock}</span>
+                </div>`;
+            });
+            h += `</div>`;
+            if(criticos.length > 0) {
+                const txt = criticos.map(p => `- ${p.nombre} (Stock: ${p.stock})`).join('%0A');
+                h += `<button onclick="window.open('https://wa.me/?text=📋 *PEDIDO DE REPOSICIÓN*%0A${txt}')" class="w-full bg-green-600 py-4 rounded-2xl font-black uppercase text-xs">Enviar Pedido WhatsApp</button>`;
+            } else { h += `<p class="text-center text-slate-500 text-xs font-bold py-10 uppercase">Todo el stock está bien</p>`; }
+            
+            document.getElementById('modalContent').innerHTML = h;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+        };
+
         window.onload = async () => {
             const s = document.getElementById('selectUsuario');
             const snap = await getDocs(query(collection(db, "usuarios"), where("estado", "==", "activo")));
