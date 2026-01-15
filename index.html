@@ -317,11 +317,24 @@
 
         window.render = () => {
             let sub = 0;
+            const metodo = document.getElementById('metodoPago').value;
+            const descInput = document.getElementById('descPorc');
+
+            if (metodo === 'Tarjeta') {
+                descInput.value = 0;
+                descInput.disabled = true;
+                descInput.style.opacity = "0.3";
+            } else {
+                descInput.disabled = false;
+                descInput.style.opacity = "1";
+            }
+
             document.getElementById('listaItems').innerHTML = listaActual.map((it, i) => {
                 sub += it.precio * it.cantidad;
                 return `<div class="flex justify-between items-center p-3 bg-slate-800/40 rounded-2xl border border-slate-700"><div class="flex flex-col"><span class="text-[10px] font-black uppercase text-white">${it.nombre}</span><span class="text-[9px] text-blue-400 font-bold">$${it.precio}</span></div><div class="flex items-center gap-3"><div class="flex items-center bg-black rounded-lg"><button onclick="window.cantMod(${i},-1)" class="px-2 py-1 text-red-500">-</button><span class="text-[10px] w-4 text-center">${it.cantidad}</span><button onclick="window.cantMod(${i},1)" class="px-2 py-1 text-green-500">+</button></div><button onclick="window.quitar(${i})" class="text-slate-600">✕</button></div></div>`;
             }).join('');
-            const d = parseFloat(document.getElementById('descPorc').value) || 0;
+
+            const d = parseFloat(descInput.value) || 0;
             const tot = (modo === 'venta') ? (sub - ((sub * d) / 100)) : sub;
             document.getElementById('subVal').innerText = sub.toLocaleString();
             document.getElementById('totalVal').innerText = tot.toLocaleString();
@@ -395,8 +408,51 @@
         window.filtrarStock = () => { const t = document.getElementById('searchStock').value.toUpperCase(); document.querySelectorAll('.item-stock').forEach(i => { i.style.display = (i.dataset.nombre.includes(t) || i.dataset.id.includes(t)) ? 'flex':'none'; }); };
         window.cantMod = (i, d) => { listaActual[i].cantidad += d; if(listaActual[i].cantidad <= 0) listaActual.splice(i,1); window.render(); };
         window.quitar = (i) => { listaActual.splice(i,1); window.render(); };
-        window.startCamera = () => { document.getElementById('cameraSection').classList.remove('hidden'); scanner = new Html5Qrcode("reader"); scanner.start({facingMode:"environment"},{fps:15,qrbox:250}, async (c)=>{ const id=c.trim(); const d=await getDoc(doc(db,"productos",id)); if(d.exists()) window.seleccionar(id); else window.crearNuevoP(id); window.cerrarModal(); }); };
-        async function registrarLog(accion) { if(userActivo) await setDoc(doc(db, "logs", "L_"+Date.now()), { usuario: userActivo.nombre, accion, fecha: Timestamp.now() }); }
+        window.startCamera = () => {
+            document.getElementById('cameraSection').classList.remove('hidden');
+            scanner = new Html5Qrcode("reader");
+            scanner.start(
+                { facingMode: "environment" },
+                { fps: 15, qrbox: 250 },
+                async (c) => {
+                    const id = c.trim();
+                    await scanner.stop();
+                    scanner = null;
+                    document.getElementById('cameraSection').classList.add('hidden');
+                    const d = await getDoc(doc(db, "productos", id));
+                    if (d.exists()) window.seleccionar(id);
+                    else window.crearNuevoP(id);
+                }
+            ).catch(err => console.error(err));
+        };
+
+        window.seleccionar = async (id) => {
+            const d = await getDoc(doc(db, "productos", id));
+            if (!d.exists()) return;
+            const p = d.data();
+            document.getElementById('manualInput').value = ""; 
+            document.getElementById('resultadosBusqueda').classList.add('hidden');
+            document.getElementById('modalContent').innerHTML = crearHeader(modo==='venta'?'Vender':'Carga') + `
+                <h3 class="text-center font-black uppercase text-blue-400 mb-4 italic">${p.nombre}</h3>
+                <input type="number" id="cantInp" inputmode="numeric" pattern="[0-9]*" placeholder="CANTIDAD" class="w-full bg-black text-white text-6xl p-6 rounded-3xl border-2 ${modo==='venta'?'border-blue-600':'border-orange-600'} text-center mb-6 font-black outline-none">
+                <button id="btnConfItem" class="w-full ${modo==='venta'?'bg-blue-600':'bg-orange-600'} py-5 rounded-2xl font-black uppercase">Confirmar</button>`;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+
+            const input = document.getElementById('cantInp');
+            setTimeout(() => input.focus(), 100); // Pequeño delay para asegurar el focus en móviles
+
+            const procesar = () => {
+                const c = parseInt(input.value);
+                if(c > 0) {
+                    const ex = listaActual.find(it => it.id === id);
+                    if(ex) ex.cantidad += c; else listaActual.push({id, nombre: p.nombre, precio: p.precio, cantidad: c});
+                    window.render(); window.cerrarModal();
+                }
+            };
+
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') procesar(); });
+            document.getElementById('btnConfItem').onclick = procesar;
+        };
 
         // --- NUEVAS FUNCIONES DE ANÁLISIS ---
         window.verMetricas = async () => {
@@ -463,6 +519,9 @@
             const snap = await getDocs(query(collection(db, "usuarios"), where("estado", "==", "activo")));
             s.innerHTML = '<option value="">-- OPERADOR --</option>';
             snap.forEach(d => { s.innerHTML += `<option value="${d.id}">${d.data().nombre}</option>`; });
+
+            // Listener para actualizar descuentos al cambiar método de pago
+            document.getElementById('metodoPago').addEventListener('change', () => window.render());
         };
     </script>
 </body>
