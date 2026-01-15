@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>POS ELITE v34.0 - ADVANCED CIERRE</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .modal-header-fixed { position: sticky; top: -24px; background: #0f172a; z-index: 50; padding: 10px 0; border-bottom: 1px solid #1e293b; margin-bottom: 15px; }
+        .modo-carga-bg { border-color: #f97316 !important; background-color: #1a0f00 !important; }
+        .modo-carga-btn { background-color: #f97316 !important; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
+
+    <div id="loginOverlay" class="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-950">
+        <div class="w-full max-w-sm text-center">
+            <h1 class="text-4xl font-black text-blue-500 mb-8 italic tracking-widest uppercase">POS ELITE</h1>
+            <div class="space-y-4">
+                <select id="selectUsuario" class="w-full bg-slate-900 border border-slate-800 p-5 rounded-3xl font-bold uppercase text-center outline-none text-white"></select>
+                <input type="password" id="loginPass" placeholder="PIN" onkeydown="if(event.key==='Enter') window.intentarLogin()" class="w-full bg-slate-900 border border-slate-800 text-center text-4xl p-5 rounded-3xl font-mono outline-none text-white">
+                <button onclick="window.intentarLogin()" class="w-full bg-blue-600 py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95">Ingresar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="mainContent" class="hidden max-w-md mx-auto p-4 pb-28">
+        <div class="flex justify-between items-center mb-4 bg-slate-900 p-4 rounded-3xl border border-slate-800">
+            <span id="displayUser" class="text-xs font-black text-blue-400 uppercase tracking-widest">---</span>
+            <button onclick="window.logout()" class="text-red-500 text-[10px] font-black uppercase border border-red-900/30 px-3 py-1 rounded-xl">Salir</button>
+        </div>
+
+        <div id="adminPanel" class="hidden mb-4 grid grid-cols-2 gap-2">
+            <button onclick="window.verStaff()" class="bg-amber-600/10 border border-amber-600/30 text-amber-500 p-3 rounded-2xl font-black text-[10px] uppercase">⚙️ Staff</button>
+            <button onclick="window.verLogs()" class="bg-purple-600/10 border border-purple-600/30 text-purple-400 p-3 rounded-2xl font-black text-[10px] uppercase">📋 Logs</button>
+        </div>
+
+        <div id="containerPrincipal" class="bg-slate-900 rounded-[2.5rem] p-6 border border-slate-800 shadow-2xl transition-all duration-300">
+            <div class="flex bg-black p-1 rounded-2xl mb-4">
+                <button id="modeVenta" onclick="window.setModo('venta')" class="flex-1 py-3 rounded-xl font-black text-[10px] uppercase bg-blue-600 text-white">Venta</button>
+                <button id="modeCarga" onclick="window.setModo('carga')" class="flex-1 py-3 rounded-xl font-black text-[10px] uppercase text-slate-500">Carga Stock</button>
+            </div>
+
+            <button id="btnScanner" onclick="window.startCamera()" class="w-full mb-4 bg-blue-700 py-4 rounded-2xl font-black uppercase text-xs">📷 Escanear</button>
+            <div id="cameraSection" class="hidden mb-4"><div id="reader" class="rounded-2xl overflow-hidden border-2 border-blue-600"></div></div>
+
+            <div class="relative mb-4">
+                <input type="text" id="manualInput" placeholder="BUSCAR O CREAR..." oninput="window.buscarProducto()" class="w-full bg-slate-800 rounded-2xl p-4 text-white font-bold uppercase outline-none focus:ring-2 focus:ring-blue-600 text-sm">
+                <div id="resultadosBusqueda" class="absolute z-[100] left-0 right-0 top-full mt-2 hidden bg-slate-800 rounded-2xl p-2 shadow-2xl max-h-60 overflow-y-auto custom-scroll border border-slate-700"></div>
+            </div>
+
+            <div id="listaItems" class="space-y-2 mb-6 min-h-[50px]"></div>
+
+            <div id="footerPrecios" class="border-t border-slate-800 pt-4 space-y-2 mb-6">
+                <div class="flex justify-between font-black text-slate-500 uppercase text-[10px]"><span>Subtotal</span><span>$<span id="subVal">0</span></span></div>
+                <div class="flex justify-between items-center text-[10px] font-black text-blue-400 uppercase">
+                    <span>Descuento %</span>
+                    <input type="number" id="descPorc" oninput="window.render()" class="w-16 bg-slate-800 text-center rounded-lg p-1 font-black text-white" value="0">
+                </div>
+                <div class="flex justify-between text-3xl font-black text-green-500 italic uppercase"><span>Total</span><span>$<span id="totalVal">0</span></span></div>
+            </div>
+
+            <div id="metodoPagoCont">
+                <select id="metodoPago" class="w-full bg-slate-800 p-4 rounded-2xl font-black text-xs uppercase mb-4 outline-none border border-transparent focus:border-blue-600 text-white">
+                    <option value="Efectivo">💵 Efectivo</option>
+                    <option value="Transferencia">📲 Transferencia</option>
+                    <option value="Tarjeta">💳 Tarjeta</option>
+                </select>
+            </div>
+
+            <button id="btnConfirmar" onclick="window.finalizar()" class="w-full bg-green-600 py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-transform">Confirmar</button>
+        </div>
+
+        <div class="fixed bottom-6 left-4 right-4 max-w-md mx-auto grid grid-cols-4 gap-2 bg-slate-900/90 backdrop-blur p-3 rounded-[2rem] border border-slate-800 shadow-2xl text-[8px] font-black uppercase text-center text-slate-500">
+            <button onclick="window.verCierre()" class="py-2 active:text-white">Cierre</button>
+            <button onclick="window.verVentas()" class="py-2 active:text-white">Ventas</button>
+            <button onclick="window.verRetiro()" class="py-2 active:text-white">Retiro</button>
+            <button onclick="window.verStock()" class="py-2 active:text-white">Stock</button>
+        </div>
+    </div>
+
+    <div id="modalUniversal" class="fixed inset-0 bg-black/95 hidden flex items-center justify-center p-4 z-[300]">
+        <div id="modalContent" class="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 w-full max-w-sm max-h-[85vh] overflow-y-auto custom-scroll shadow-2xl relative"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, getDoc, updateDoc, increment, collection, getDocs, query, where, setDoc, deleteDoc, Timestamp, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCZTw6LbhfyC4tY9TPSz-Yb_jpfBPvGiKw",
+            authDomain: "lib-pyc.firebaseapp.com",
+            projectId: "lib-pyc",
+            storageBucket: "lib-pyc.firebasestorage.app",
+            messagingSenderId: "837745557574",
+            appId: "1:837745557574:web:2e94c3ec8aff002def4a47"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let userActivo = null;
+        let listaActual = [];
+        let modo = 'venta';
+        let scanner = null;
+
+        const crearHeader = (titulo) => `<div class="modal-header-fixed flex justify-between items-center"><h3 class="text-lg font-black uppercase italic text-blue-500">${titulo}</h3><button onclick="window.cerrarModal()" class="bg-red-600 text-white w-8 h-8 rounded-full font-black flex items-center justify-center">✕</button></div>`;
+        window.cerrarModal = () => { document.getElementById('modalUniversal').classList.add('hidden'); if(scanner) { scanner.stop(); scanner = null; } };
+        window.logout = () => location.reload();
+
+        window.intentarLogin = async () => {
+            const id = document.getElementById('selectUsuario').value;
+            const pin = document.getElementById('loginPass').value;
+            if(!id) return;
+            const d = await getDoc(doc(db, "usuarios", id));
+            if(d.exists() && d.data().pin === pin) {
+                userActivo = { id: d.id, ...d.data() };
+                document.getElementById('loginOverlay').classList.add('hidden');
+                document.getElementById('mainContent').classList.remove('hidden');
+                document.getElementById('displayUser').innerText = userActivo.nombre;
+                if(userActivo.rol === 'admin') document.getElementById('adminPanel').classList.remove('hidden');
+                registrarLog("ACCESO");
+            } else { alert("PIN INCORRECTO"); }
+        };
+
+        // --- FINALIZAR (FOLIOS + ÚLTIMA VENTA) ---
+        window.finalizar = async () => {
+            if(!listaActual.length) return alert("LISTA VACÍA");
+            const hoy = new Date().toISOString().split('T')[0];
+            const sub = listaActual.reduce((s, i) => s + (i.precio * i.cantidad), 0);
+            const porc = parseFloat(document.getElementById('descPorc').value) || 0;
+            const tot = (modo === 'venta') ? (sub - ((sub * porc) / 100)) : sub;
+
+            try {
+                const qF = query(collection(db, "ventas"), where("fechaSimple", "==", hoy));
+                const snapF = await getDocs(qF);
+                const num = snapF.size + 1;
+                const folio = (modo === 'venta' ? `VENTA ${num}` : `CARGA ${num}`);
+                const docId = (modo === 'venta' ? 'V_' : 'C_') + Date.now();
+
+                await setDoc(doc(db, "ventas", docId), { 
+                    folio, items: listaActual, total: tot, 
+                    metodo: (modo === 'venta' ? document.getElementById('metodoPago').value : 'CARGA_STOCK'), 
+                    vendedor: userActivo.nombre, fechaSimple: hoy, fecha: Timestamp.now() 
+                });
+
+                for(const i of listaActual) {
+                    if (!i.nombre.startsWith("S-")) {
+                        const upd = { stock: increment(modo === 'venta' ? -i.cantidad : i.cantidad) };
+                        if(modo === 'venta') upd.ultimaVenta = Timestamp.now();
+                        await updateDoc(doc(db, "productos", i.id), upd);
+                    }
+                }
+                alert(folio + " EXITOSA");
+                listaActual = []; document.getElementById('descPorc').value = 0; window.render();
+            } catch (e) { alert("ERROR"); }
+        };
+
+        // --- CIERRE DE CAJA MEJORADO (AUDITORÍA PROFESIONAL) ---
+        window.verCierre = async () => {
+            const hoy = new Date().toISOString().split('T')[0];
+            const q = query(collection(db, "ventas"), where("fechaSimple", "==", hoy));
+            const snap = await getDocs(q);
+            
+            let stats = { 
+                Efectivo: 0, Tarjeta: 0, Transferencia: 0, Retiros: 0, 
+                cVentas: 0, cRetiros: 0, tBruto: 0 
+            };
+            let csv = "Fecha,Folio,Vendedor,Metodo,Total\n";
+
+            snap.forEach(d => {
+                const v = d.data();
+                if(v.metodo === 'RETIRO') {
+                    stats.Retiros += Math.abs(v.total);
+                    stats.cRetiros++;
+                } else if(v.metodo !== 'CARGA_STOCK') {
+                    stats.tBruto += v.total;
+                    stats[v.metodo] += v.total;
+                    stats.cVentas++;
+                }
+                csv += `${hoy},${v.folio || 'RETIRO'},${v.vendedor},${v.metodo},${v.total}\n`;
+            });
+
+            const totalCajaEfectivo = stats.Efectivo - stats.Retiros;
+
+            let h = crearHeader("Cierre Diario: " + hoy);
+            h += `
+            <div class="space-y-3 mb-6">
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="bg-black/40 p-3 rounded-2xl border border-slate-800">
+                        <p class="text-[8px] text-slate-500 font-black uppercase">Ventas Hoy</p>
+                        <p class="text-xl font-black text-blue-400">${stats.cVentas}</p>
+                    </div>
+                    <div class="bg-black/40 p-3 rounded-2xl border border-slate-800">
+                        <p class="text-[8px] text-slate-500 font-black uppercase">Venta Bruta</p>
+                        <p class="text-xl font-black text-white">$${stats.tBruto.toLocaleString()}</p>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800/20 p-4 rounded-2xl border border-slate-800 space-y-2">
+                    <div class="flex justify-between text-[10px] font-bold"><span>💵 EFECTIVO</span><span class="text-white">$${stats.Efectivo.toLocaleString()}</span></div>
+                    <div class="flex justify-between text-[10px] font-bold"><span>💳 TARJETA</span><span class="text-white">$${stats.Tarjeta.toLocaleString()}</span></div>
+                    <div class="flex justify-between text-[10px] font-bold"><span>📲 TRANSF.</span><span class="text-white">$${stats.Transferencia.toLocaleString()}</span></div>
+                    <div class="flex justify-between text-[10px] font-bold text-red-500 border-t border-slate-800 pt-2"><span>📉 RETIROS (${stats.cRetiros})</span><span>-$${stats.Retiros.toLocaleString()}</span></div>
+                </div>
+
+                <div class="bg-green-600/10 p-4 rounded-3xl border border-green-600/30 text-center">
+                    <p class="text-[9px] text-green-500 font-black uppercase tracking-widest">Efectivo Real en Caja</p>
+                    <p class="text-4xl font-black text-green-500 italic">$${totalCajaEfectivo.toLocaleString()}</p>
+                </div>
+            </div>
+
+            <button id="btnD" class="w-full bg-slate-700 py-4 rounded-2xl font-black uppercase text-[10px] mb-2">Descargar Reporte CSV</button>
+            <button onclick="window.compartirCierre('${hoy}', ${stats.tBruto}, ${totalCajaEfectivo}, ${stats.cVentas})" class="w-full bg-green-600 py-4 rounded-2xl font-black uppercase text-[10px]">Enviar Resumen WhatsApp</button>
+            `;
+            
+            document.getElementById('modalContent').innerHTML = h;
+            document.getElementById('btnD').onclick = () => {
+                const blob = new Blob(["\ufeff"+csv], {type:'text/csv;charset=utf-8;'});
+                const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `CIERRE_${hoy}.csv`; a.click();
+            };
+            document.getElementById('modalUniversal').classList.remove('hidden');
+        };
+
+        window.compartirCierre = (fecha, bruto, real, cant) => {
+            const txt = `*RESUMEN DE CIERRE* 📊%0A📅 Fecha: ${fecha}%0A💰 Venta Bruta: $${bruto}%0A💵 Efectivo Caja: $${real}%0A🛍️ Cant. Ventas: ${cant}%0A-------------------`;
+            window.open(`https://wa.me/?text=${txt}`);
+        };
+
+        // --- STOCK CON ANTIGÜEDAD ---
+        window.verStock = async () => {
+            const snap = await getDocs(collection(db, "productos"));
+            let prods = [];
+            snap.forEach(d => prods.push({ id: d.id, ...d.data() }));
+            prods.sort((a, b) => a.nombre.localeCompare(b.nombre));
+            let h = crearHeader("Inventario");
+            h += `<input type="text" id="searchStock" oninput="window.filtrarStock()" placeholder="BUSCAR..." class="w-full bg-black border border-slate-700 p-4 rounded-2xl text-xs font-black mb-4 sticky top-[45px] z-40 text-white outline-none">`;
+            prods.forEach(p => {
+                let dTxt = "SIN VENTAS";
+                if(p.ultimaVenta) {
+                    const diff = Math.floor((new Date() - p.ultimaVenta.toDate()) / (1000*60*60*24));
+                    dTxt = diff === 0 ? "HOY" : `HACE ${diff} DÍAS`;
+                }
+                h += `<div class="item-stock p-3 bg-black/40 border border-slate-800 rounded-2xl mb-2 flex flex-col gap-2" data-nombre="${p.nombre}" data-id="${p.id}">
+                    <div class="flex justify-between items-start">
+                        <div class="flex flex-col"><span class="text-[10px] font-black uppercase text-white">${p.nombre}</span><span class="text-[8px] font-mono text-slate-500">${p.id}</span></div>
+                        <div class="flex flex-col items-end"><span class="font-black ${p.stock < 5 ? 'text-red-500':'text-green-500'} bg-black px-2 py-1 rounded-lg text-xs">${p.stock}</span><span class="text-[7px] font-black text-slate-600 mt-1 uppercase italic">${dTxt}</span></div>
+                    </div>
+                    <div class="flex justify-between items-center"><span class="text-blue-400 font-black text-sm">$${p.precio}</span><div class="flex gap-1"><button onclick="window.editarPrecio('${p.id}', '${p.nombre}', ${p.precio})" class="text-[7px] font-black bg-blue-600/20 text-blue-400 px-2 py-1 rounded-lg">PRECIO</button>${userActivo.rol==='admin' ? `<button onclick="window.ajustarStock('${p.id}', '${p.nombre}', ${p.stock})" class="text-[7px] font-black bg-orange-600/20 text-orange-500 px-2 py-1 rounded-lg">AJUSTAR</button><button onclick="window.eliminarProducto('${p.id}')" class="text-[7px] font-black bg-red-600/20 text-red-500 px-2 py-1 rounded-lg">ELIMINAR</button>`:''}</div></div>
+                </div>`;
+            });
+            document.getElementById('modalContent').innerHTML = h;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+        };
+
+        // --- FUNCIONES CORE (SIN CAMBIOS) ---
+        window.setModo = (m) => {
+            modo = m; listaActual = []; window.render();
+            const cont = document.getElementById('containerPrincipal');
+            const btnConf = document.getElementById('btnConfirmar');
+            const btnScan = document.getElementById('btnScanner');
+            if(modo === 'carga') {
+                cont.classList.add('modo-carga-bg'); btnConf.classList.add('modo-carga-btn'); btnConf.innerText = "INGRESAR A STOCK";
+                btnScan.classList.replace('bg-blue-700', 'bg-orange-700'); document.getElementById('footerPrecios').classList.add('hidden');
+                document.getElementById('metodoPagoCont').classList.add('hidden');
+                document.getElementById('modeCarga').className = "flex-1 py-3 rounded-xl font-black text-[10px] uppercase bg-orange-600 text-white";
+                document.getElementById('modeVenta').className = "flex-1 py-3 rounded-xl font-black text-[10px] uppercase text-slate-500";
+            } else {
+                cont.classList.remove('modo-carga-bg'); btnConf.classList.remove('modo-carga-btn'); btnConf.innerText = "CONFIRMAR VENTA";
+                btnScan.classList.replace('bg-orange-700', 'bg-blue-700'); document.getElementById('footerPrecios').classList.remove('hidden');
+                document.getElementById('metodoPagoCont').classList.remove('hidden');
+                document.getElementById('modeVenta').className = "flex-1 py-3 rounded-xl font-black text-[10px] uppercase bg-blue-600 text-white";
+                document.getElementById('modeCarga').className = "flex-1 py-3 rounded-xl font-black text-[10px] uppercase text-slate-500";
+            }
+        };
+
+        window.buscarProducto = async () => {
+            const txt = document.getElementById('manualInput').value.toUpperCase();
+            if(txt.length < 2) { document.getElementById('resultadosBusqueda').classList.add('hidden'); return; }
+            const snap = await getDocs(collection(db, "productos"));
+            let h = "";
+            snap.forEach(d => {
+                if(d.id.includes(txt) || d.data().nombre.includes(txt)) {
+                    h += `<div onclick="window.seleccionar('${d.id}')" class="p-4 border-b border-slate-700 font-black text-xs uppercase active:bg-blue-600 text-white">${d.data().nombre}</div>`;
+                }
+            });
+            const div = document.getElementById('resultadosBusqueda');
+            div.innerHTML = h + `<button onclick="window.crearNuevoP('${txt}')" class="p-4 text-blue-400 font-black text-[10px] uppercase w-full text-left">+ CREAR: ${txt}</button><button onclick="window.crearNuevoP('INT-${Date.now()}')" class="p-4 text-orange-400 font-black text-[10px] uppercase w-full text-left">+ PRODUCTO SIN CÓDIGO</button>`;
+            div.classList.remove('hidden');
+        };
+
+        window.seleccionar = async (id) => {
+            const d = await getDoc(doc(db, "productos", id));
+            if(!d.exists()) return;
+            const p = d.data();
+            document.getElementById('manualInput').value = ""; 
+            document.getElementById('resultadosBusqueda').classList.add('hidden');
+            document.getElementById('modalContent').innerHTML = crearHeader(modo==='venta'?'Vender':'Carga') + `
+                <h3 class="text-center font-black uppercase text-blue-400 mb-4 italic">${p.nombre}</h3>
+                <input type="number" id="cantInp" class="w-full bg-black text-white text-6xl p-6 rounded-3xl border-2 ${modo==='venta'?'border-blue-600':'border-orange-600'} text-center mb-6 font-black outline-none">
+                <button id="btnConf" class="w-full ${modo==='venta'?'bg-blue-600':'bg-orange-600'} py-5 rounded-2xl font-black uppercase">Confirmar</button>`;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+            document.getElementById('cantInp').focus();
+            document.getElementById('btnConf').onclick = () => {
+                const c = parseInt(document.getElementById('cantInp').value);
+                if(c > 0) {
+                    const ex = listaActual.find(it => it.id === id);
+                    if(ex) ex.cantidad += c; else listaActual.push({id, nombre: p.nombre, precio: p.precio, cantidad: c});
+                    window.render(); window.cerrarModal();
+                }
+            };
+        };
+
+        window.render = () => {
+            let sub = 0;
+            document.getElementById('listaItems').innerHTML = listaActual.map((it, i) => {
+                sub += it.precio * it.cantidad;
+                return `<div class="flex justify-between items-center p-3 bg-slate-800/40 rounded-2xl border border-slate-700"><div class="flex flex-col"><span class="text-[10px] font-black uppercase text-white">${it.nombre}</span><span class="text-[9px] text-blue-400 font-bold">$${it.precio}</span></div><div class="flex items-center gap-3"><div class="flex items-center bg-black rounded-lg"><button onclick="window.cantMod(${i},-1)" class="px-2 py-1 text-red-500">-</button><span class="text-[10px] w-4 text-center">${it.cantidad}</span><button onclick="window.cantMod(${i},1)" class="px-2 py-1 text-green-500">+</button></div><button onclick="window.quitar(${i})" class="text-slate-600">✕</button></div></div>`;
+            }).join('');
+            const d = parseFloat(document.getElementById('descPorc').value) || 0;
+            const tot = (modo === 'venta') ? (sub - ((sub * d) / 100)) : sub;
+            document.getElementById('subVal').innerText = sub.toLocaleString();
+            document.getElementById('totalVal').innerText = tot.toLocaleString();
+        };
+
+        window.verVentas = async () => {
+            const snap = await getDocs(query(collection(db, "ventas"), orderBy("fecha", "desc"), limit(30)));
+            let h = crearHeader("Movimientos");
+            snap.forEach(d => {
+                const v = d.data();
+                h += `<div class="p-3 bg-black/40 border border-slate-800 rounded-xl mb-2 text-[10px]"><div class="flex justify-between font-black"><span class="${v.total < 0 ? 'text-red-500':'text-blue-400'}">${v.folio || 'RETIRO'}</span><span>$${v.total}</span></div><div class="text-slate-500 font-bold uppercase">${v.vendedor} | ${v.metodo}</div></div>`;
+            });
+            document.getElementById('modalContent').innerHTML = h;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+        };
+
+        window.verRetiro = () => {
+            document.getElementById('modalContent').innerHTML = crearHeader("Retiro") + `<input type="number" id="rMonto" placeholder="MONTO $" class="w-full bg-black border-2 border-red-900 p-6 rounded-3xl text-4xl text-center font-black mb-4 outline-none text-white"><input type="text" id="rMot" placeholder="MOTIVO" class="w-full bg-slate-800 p-4 rounded-xl mb-6 font-black uppercase text-xs text-white outline-none"><button onclick="window.confirmarRetiro()" class="w-full bg-red-600 py-5 rounded-2xl font-black uppercase">Confirmar</button>`;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+        };
+
+        window.confirmarRetiro = async () => {
+            const m = parseFloat(document.getElementById('rMonto').value);
+            const mot = document.getElementById('rMot').value.toUpperCase();
+            if(!m || !mot) return;
+            await setDoc(doc(db, "ventas", "R_"+Date.now()), { total: -m, metodo: "RETIRO", motivo: mot, vendedor: userActivo.nombre, fechaSimple: new Date().toISOString().split('T')[0], fecha: Timestamp.now() });
+            window.cerrarModal();
+        };
+
+        window.verStaff = async () => {
+            const snap = await getDocs(collection(db, "usuarios"));
+            let h = crearHeader("Staff");
+            h += `<div class="bg-blue-600/10 p-4 rounded-2xl mb-4 border border-blue-600/30"><input type="text" id="stNombre" placeholder="NOMBRE" class="w-full bg-black p-2 rounded-lg mb-2 text-xs uppercase font-bold text-white border border-slate-700 outline-none"><input type="password" id="stPin" placeholder="PIN" class="w-full bg-black p-2 rounded-lg mb-2 text-xs font-bold text-white border border-slate-700 outline-none"><button onclick="window.crearStaff()" class="w-full bg-blue-600 py-2 rounded-lg font-black text-[10px]">CREAR OPERADOR</button></div>`;
+            snap.forEach(d => {
+                const u = d.data();
+                h += `<div class="p-3 bg-black/40 border border-slate-800 rounded-xl flex justify-between items-center mb-2"><div><p class="font-black text-blue-400 uppercase text-xs">${u.nombre}</p><p class="text-[9px] font-mono text-slate-500">PIN: ${u.pin}</p></div>${u.rol !== 'admin' ? `<button onclick="window.eliminarStaff('${d.id}')" class="text-red-500 text-[10px] font-black">BORRAR</button>`:''}</div>`;
+            });
+            document.getElementById('modalContent').innerHTML = h;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+        };
+
+        window.crearStaff = async () => {
+            const n = document.getElementById('stNombre').value.toUpperCase(); const p = document.getElementById('stPin').value;
+            if(n && p) { await setDoc(doc(db, "usuarios", "U_"+Date.now()), { nombre: n, pin: p, rol: "operador", estado: "activo" }); window.verStaff(); }
+        };
+
+        window.verLogs = async () => {
+            const snap = await getDocs(query(collection(db, "logs"), orderBy("fecha", "desc"), limit(40)));
+            let h = crearHeader("Logs");
+            snap.forEach(d => {
+                const l = d.data();
+                h += `<div class="p-2 border-b border-slate-800 text-[9px] font-bold uppercase text-slate-400"><span class="text-blue-500">${l.usuario}</span>: ${l.accion}</div>`;
+            });
+            document.getElementById('modalContent').innerHTML = h;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+        };
+
+        window.crearNuevoP = (cod) => {
+            document.getElementById('modalContent').innerHTML = crearHeader("Nuevo") + `<div class="space-y-4"><input type="text" id="nNom" placeholder="NOMBRE" class="w-full bg-slate-800 p-4 rounded-xl text-white font-black uppercase outline-none"><input type="number" id="nPre" placeholder="PRECIO $" class="w-full bg-slate-800 p-4 rounded-xl text-white font-black text-2xl outline-none"><button id="btnS" class="w-full bg-green-600 py-5 rounded-2xl font-black uppercase">Guardar</button></div>`;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+            document.getElementById('btnS').onclick = async () => {
+                const n = document.getElementById('nNom').value.toUpperCase(); const p = parseFloat(document.getElementById('nPre').value);
+                if(n && p) { await setDoc(doc(db,"productos",cod), {nombre:n, precio:p, stock:0}); window.cerrarModal(); window.seleccionar(cod); }
+            };
+        };
+
+        window.eliminarStaff = async (id) => { if(confirm("¿ELIMINAR?")) { await deleteDoc(doc(db,"usuarios",id)); window.verStaff(); } };
+        window.eliminarProducto = async (id) => { if(confirm("¿BORRAR?")) { await deleteDoc(doc(db,"productos",id)); window.verStock(); } };
+        window.editarPrecio = async (id, nom, pre) => { const n = prompt("PRECIO:", pre); if(n) { await updateDoc(doc(db,"productos",id), {precio: parseFloat(n)}); window.verStock(); } };
+        window.ajustarStock = async (id, nom, st) => { const n = prompt("AJUSTAR (+/-):", "0"); if(n) { await updateDoc(doc(db,"productos",id), {stock: increment(parseInt(n))}); window.verStock(); } };
+        window.filtrarStock = () => { const t = document.getElementById('searchStock').value.toUpperCase(); document.querySelectorAll('.item-stock').forEach(i => { i.style.display = (i.dataset.nombre.includes(t) || i.dataset.id.includes(t)) ? 'flex':'none'; }); };
+        window.cantMod = (i, d) => { listaActual[i].cantidad += d; if(listaActual[i].cantidad <= 0) listaActual.splice(i,1); window.render(); };
+        window.quitar = (i) => { listaActual.splice(i,1); window.render(); };
+        window.startCamera = () => { document.getElementById('cameraSection').classList.remove('hidden'); scanner = new Html5Qrcode("reader"); scanner.start({facingMode:"environment"},{fps:15,qrbox:250}, async (c)=>{ const id=c.trim(); const d=await getDoc(doc(db,"productos",id)); if(d.exists()) window.seleccionar(id); else window.crearNuevoP(id); window.cerrarModal(); }); };
+        async function registrarLog(accion) { if(userActivo) await setDoc(doc(db, "logs", "L_"+Date.now()), { usuario: userActivo.nombre, accion, fecha: Timestamp.now() }); }
+        
+        window.onload = async () => {
+            const s = document.getElementById('selectUsuario');
+            const snap = await getDocs(query(collection(db, "usuarios"), where("estado", "==", "activo")));
+            s.innerHTML = '<option value="">-- OPERADOR --</option>';
+            snap.forEach(d => { s.innerHTML += `<option value="${d.id}">${d.data().nombre}</option>`; });
+        };
+    </script>
+</body>
+</html>
