@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>POS ELITE v29.2</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
+
+    <div id="loginOverlay" class="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-950">
+        <div class="w-full max-w-sm text-center">
+            <h1 class="text-4xl font-black text-blue-500 mb-8 italic tracking-tighter uppercase">POS ELITE</h1>
+            <div class="space-y-4">
+                <select id="selectUsuario" class="w-full bg-slate-900 border border-slate-800 p-5 rounded-3xl font-bold uppercase text-center outline-none"></select>
+                <input type="password" id="loginPass" placeholder="PIN" onkeydown="if(event.key==='Enter') window.intentarLogin()" class="w-full bg-slate-900 border border-slate-800 text-center text-4xl p-5 rounded-3xl font-mono outline-none">
+                <button onclick="window.intentarLogin()" class="w-full bg-blue-600 py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95">Ingresar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="mainContent" class="hidden max-w-md mx-auto p-4 pb-28">
+        <div class="flex justify-between items-center mb-4 bg-slate-900 p-4 rounded-3xl border border-slate-800">
+            <span id="displayUser" class="text-xs font-black text-blue-400 uppercase tracking-widest">---</span>
+            <button onclick="window.logout()" class="text-red-500 text-[10px] font-black uppercase border border-red-900/30 px-3 py-1 rounded-xl">Salir</button>
+        </div>
+
+        <div id="adminPanel" class="hidden mb-4 grid grid-cols-2 gap-2">
+            <button onclick="window.verStaff()" class="bg-amber-600/10 border border-amber-600/30 text-amber-500 p-3 rounded-2xl font-black text-[10px] uppercase">⚙️ Staff</button>
+            <button onclick="window.verLogs()" class="bg-purple-600/10 border border-purple-600/30 text-purple-400 p-3 rounded-2xl font-black text-[10px] uppercase">📋 Logs</button>
+        </div>
+
+        <div class="bg-slate-900 rounded-[2.5rem] p-6 border border-slate-800 shadow-2xl">
+            <div class="flex bg-black p-1 rounded-2xl mb-4">
+                <button id="modeVenta" onclick="window.setModo('venta')" class="flex-1 py-3 rounded-xl font-black text-[10px] uppercase bg-blue-600 text-white">Venta</button>
+                <button id="modeCarga" onclick="window.setModo('carga')" class="flex-1 py-3 rounded-xl font-black text-[10px] uppercase text-slate-500">Carga Stock</button>
+            </div>
+
+            <button onclick="window.startCamera()" class="w-full mb-4 bg-blue-700 py-4 rounded-2xl font-black uppercase text-xs">📷 Escanear</button>
+            <div id="cameraSection" class="hidden mb-4"><div id="reader" class="rounded-2xl overflow-hidden border-2 border-blue-600"></div></div>
+
+            <div class="relative mb-4">
+                <input type="text" id="manualInput" placeholder="BUSCAR PRODUCTO..." oninput="window.buscarProducto()" class="w-full bg-slate-800 rounded-2xl p-4 text-white font-bold uppercase outline-none focus:ring-2 focus:ring-blue-600">
+                <div id="resultadosBusqueda" class="absolute z-[100] left-0 right-0 top-full mt-2 hidden bg-slate-800 rounded-2xl p-2 shadow-2xl max-h-60 overflow-y-auto custom-scroll border border-slate-700"></div>
+            </div>
+
+            <div id="listaItems" class="space-y-2 mb-6 min-h-[50px]"></div>
+
+            <div class="border-t border-slate-800 pt-4 space-y-2 mb-6">
+                <div class="flex justify-between font-black text-slate-500 uppercase text-[10px]"><span>Subtotal</span><span>$<span id="subVal">0</span></span></div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-black text-blue-400 uppercase">Desc % (Efec/Trans)</span>
+                    <input type="number" id="descPorc" oninput="window.render()" class="w-16 bg-slate-800 text-center rounded-lg p-1 font-black disabled:opacity-20 text-white" value="0">
+                </div>
+                <div class="flex justify-between text-3xl font-black text-green-500 italic uppercase"><span>Total</span><span>$<span id="totalVal">0</span></span></div>
+            </div>
+
+            <select id="metodoPago" onchange="window.validarPago()" class="w-full bg-slate-800 p-4 rounded-2xl font-black text-xs uppercase mb-4 outline-none border border-transparent focus:border-blue-600">
+                <option value="Efectivo">💵 Efectivo</option>
+                <option value="Transferencia">📲 Transferencia</option>
+                <option value="Tarjeta">💳 Tarjeta</option>
+            </select>
+
+            <button onclick="window.finalizar()" class="w-full bg-green-600 py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-transform">Confirmar</button>
+        </div>
+
+        <div class="fixed bottom-6 left-4 right-4 max-w-md mx-auto grid grid-cols-4 gap-2 bg-slate-900/90 backdrop-blur p-3 rounded-[2rem] border border-slate-800 shadow-2xl text-[8px] font-black uppercase text-center text-slate-500">
+            <button onclick="window.verCierre()" class="py-2 active:text-white">Cierre</button>
+            <button onclick="window.verVentas()" class="py-2 active:text-white">Ventas</button>
+            <button onclick="window.verRetiro()" class="py-2 active:text-white">Retiro</button>
+            <button onclick="window.verStock()" class="py-2 active:text-white">Stock</button>
+        </div>
+    </div>
+
+    <div id="modalUniversal" class="fixed inset-0 bg-black/95 hidden flex items-center justify-center p-4 z-[300]">
+        <div id="modalContent" class="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 w-full max-w-sm max-h-[85vh] overflow-y-auto custom-scroll shadow-2xl"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, getDoc, updateDoc, increment, collection, getDocs, query, where, setDoc, deleteDoc, Timestamp, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCZTw6LbhfyC4tY9TPSz-Yb_jpfBPvGiKw",
+            authDomain: "lib-pyc.firebaseapp.com",
+            projectId: "lib-pyc",
+            storageBucket: "lib-pyc.firebasestorage.app",
+            messagingSenderId: "837745557574",
+            appId: "1:837745557574:web:2e94c3ec8aff002def4a47"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let userActivo = null;
+        let listaActual = [];
+        let modo = 'venta';
+        let scanner = null;
+
+        // --- GESTIÓN DE STOCK ORDENADA ---
+        window.verStock = async () => {
+            const snap = await getDocs(collection(db, "productos"));
+            let productos = [];
+            snap.forEach(d => productos.push({ id: d.id, ...d.data() }));
+
+            // ORDEN ALFABÉTICO
+            productos.sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+            let h = `<h3 class="text-xl font-black uppercase mb-6 text-center italic">Inventario Alfabetico</h3><div class="space-y-2">`;
+
+            productos.forEach(p => {
+                const isAdmin = userActivo.rol === 'admin';
+                h += `
+                <div class="p-3 bg-black/40 border border-slate-800 rounded-2xl flex flex-col gap-2">
+                    <div class="flex justify-between items-start">
+                        <div class="flex flex-col"><span class="text-[10px] font-black uppercase text-white">${p.nombre}</span><span class="text-[8px] font-mono text-slate-500">${p.id}</span></div>
+                        <span class="font-black ${p.stock < 5 ? 'text-red-500':'text-green-500'} bg-black px-2 py-1 rounded-lg text-xs">${p.stock}</span>
+                    </div>
+                    <div class="flex justify-between items-center bg-slate-900/50 p-2 rounded-xl">
+                        <span class="text-blue-400 font-black text-sm">$${p.precio}</span>
+                        <div class="flex gap-1">
+                            <button onclick="window.editarPrecio('${p.id}', '${p.nombre}', ${p.precio})" class="text-[7px] font-black bg-blue-600/20 text-blue-400 border border-blue-400/30 px-2 py-1 rounded-lg uppercase">Precio</button>
+                            ${isAdmin ? `<button onclick="window.ajustarStock('${p.id}', '${p.nombre}', ${p.stock})" class="text-[7px] font-black bg-orange-600/20 text-orange-500 border border-orange-500/30 px-2 py-1 rounded-lg uppercase">Ajustar</button>` : ''}
+                            ${isAdmin ? `<button onclick="window.eliminarProducto('${p.id}', '${p.nombre}')" class="text-[7px] font-black bg-red-600/20 text-red-500 border border-red-500/30 px-2 py-1 rounded-lg uppercase">Eliminar</button>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+            });
+
+            document.getElementById('modalContent').innerHTML = h + `</div><button onclick="window.cerrarModal()" class="w-full mt-6 text-slate-500 font-black uppercase text-[10px]">Cerrar</button>`;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+        };
+
+        window.ajustarStock = async (id, nombre, actual) => {
+            const diff = prompt(`AJUSTAR STOCK PARA: ${nombre}\nActual: ${actual}\nIngrese el número a sumar o restar (ej: -5 para descontar, 10 para agregar):`, "0");
+            if(diff !== null && !isNaN(diff) && diff !== "0") {
+                const valor = parseInt(diff);
+                await updateDoc(doc(db, "productos", id), { stock: increment(valor) });
+                registrarLog(`AJUSTE STOCK: ${nombre} (${valor})`);
+                window.verStock();
+            }
+        };
+
+        // --- ASIGNACIÓN GLOBAL Y CORE (Resto de v29.1) ---
+        window.intentarLogin = async () => {
+            const id = document.getElementById('selectUsuario').value;
+            const pin = document.getElementById('loginPass').value;
+            if(!id) return;
+            const d = await getDoc(doc(db, "usuarios", id));
+            if(d.exists() && d.data().pin === pin) {
+                userActivo = { id: d.id, ...d.data() };
+                document.getElementById('loginOverlay').classList.add('hidden');
+                document.getElementById('mainContent').classList.remove('hidden');
+                document.getElementById('displayUser').innerText = userActivo.nombre;
+                if(userActivo.rol === 'admin') document.getElementById('adminPanel').classList.remove('hidden');
+                registrarLog("ACCESO"); window.validarPago();
+            } else { alert("PIN INCORRECTO"); }
+        };
+
+        window.buscarProducto = async () => {
+            const txt = document.getElementById('manualInput').value.toUpperCase();
+            if(txt.length < 2) { document.getElementById('resultadosBusqueda').classList.add('hidden'); return; }
+            const snap = await getDocs(collection(db, "productos"));
+            let h = "";
+            snap.forEach(d => {
+                if(d.id.includes(txt) || d.data().nombre.includes(txt)) {
+                    h += `<div onclick="window.seleccionar('${d.id}')" class="p-4 border-b border-slate-700 font-black text-xs uppercase active:bg-blue-600">${d.data().nombre}</div>`;
+                }
+            });
+            const div = document.getElementById('resultadosBusqueda');
+            div.innerHTML = h || `<button onclick="window.crearNuevoP('${txt}')" class="p-4 text-blue-400 font-black text-[10px] uppercase w-full text-left">+ CREAR NUEVO: ${txt}</button>`;
+            div.classList.remove('hidden');
+        };
+
+        window.seleccionar = async (id) => {
+            const d = await getDoc(doc(db, "productos", id));
+            if(!d.exists()) return;
+            const p = d.data();
+            document.getElementById('manualInput').value = ""; 
+            document.getElementById('resultadosBusqueda').classList.add('hidden');
+            document.getElementById('modalContent').innerHTML = `
+                <h3 class="text-center font-black uppercase text-blue-400 mb-4 italic">${p.nombre}</h3>
+                <input type="number" id="cantInp" placeholder="CANTIDAD" class="w-full bg-black text-white text-6xl p-6 rounded-3xl border-2 border-blue-600 text-center mb-6 font-black outline-none">
+                <button id="btnConf" class="w-full bg-blue-600 py-5 rounded-2xl font-black uppercase">Confirmar</button>`;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+            const inp = document.getElementById('cantInp'); inp.focus();
+            document.getElementById('btnConf').onclick = () => window.confirmar(id, p.nombre, p.precio);
+            inp.onkeydown = (e) => { if(e.key === 'Enter') window.confirmar(id, p.nombre, p.precio); };
+        };
+
+        window.confirmar = (id, nombre, precio) => {
+            const c = parseInt(document.getElementById('cantInp').value);
+            if(c > 0) {
+                const ex = listaActual.find(it => it.id === id);
+                if(ex) ex.cantidad += c; else listaActual.push({id, nombre, precio, cantidad: c});
+                window.render(); window.cerrarModal();
+            }
+        };
+
+        window.render = () => {
+            let sub = 0;
+            document.getElementById('listaItems').innerHTML = listaActual.map((it, i) => {
+                sub += it.precio * it.cantidad;
+                return `<div class="flex justify-between items-center p-3 bg-slate-800/40 rounded-2xl border border-slate-700">
+                    <div class="flex flex-col"><span class="text-[10px] font-black uppercase">${it.nombre}</span><span class="text-[9px] text-blue-400 font-bold">$${it.precio}</span></div>
+                    <div class="flex items-center gap-3"><div class="flex items-center bg-black rounded-lg"><button onclick="window.cantMod(${i},-1)" class="px-2 py-1 text-red-500 font-black">-</button><span class="text-[10px] font-mono w-4 text-center text-white">${it.cantidad}</span><button onclick="window.cantMod(${i},1)" class="px-2 py-1 text-green-500 font-black">+</button></div><button onclick="window.quitar(${i})" class="text-slate-600">✕</button></div>
+                </div>`;
+            }).join('');
+            const porc = parseFloat(document.getElementById('descPorc').value) || 0;
+            const tot = sub - ((sub * porc) / 100);
+            document.getElementById('subVal').innerText = sub.toLocaleString();
+            document.getElementById('totalVal').innerText = tot.toLocaleString();
+        };
+
+        window.validarPago = () => {
+            const met = document.getElementById('metodoPago').value;
+            const desc = document.getElementById('descPorc');
+            const permiteDescuento = (met === 'Efectivo' || met === 'Transferencia');
+            desc.disabled = !permiteDescuento;
+            if(!permiteDescuento) desc.value = 0;
+            window.render();
+        };
+
+        window.editarPrecio = async (id, nombre, actual) => {
+            const nuevo = prompt(`NUEVO PRECIO PARA: ${nombre}`, actual);
+            if(nuevo !== null && !isNaN(nuevo) && nuevo > 0) {
+                await updateDoc(doc(db, "productos", id), { precio: parseFloat(nuevo) });
+                registrarLog(`PRECIO: ${nombre} -> $${nuevo}`); window.verStock();
+            }
+        };
+
+        window.eliminarProducto = async (id, nombre) => {
+            if(confirm(`¿ELIMINAR ${nombre}?`)) {
+                await deleteDoc(doc(db, "productos", id));
+                registrarLog(`BORRÓ: ${nombre}`); window.verStock();
+            }
+        };
+
+        window.verCierre = async () => {
+            const hoy = new Date().toISOString().split('T')[0];
+            const snap = await getDocs(query(collection(db, "ventas"), where("fechaSimple", "==", hoy)));
+            let tot = 0, efec = 0, tarj = 0, trans = 0, ret = 0, cVentas = 0;
+            snap.forEach(d => {
+                const v = d.data();
+                if(v.metodo === 'RETIRO') ret += Math.abs(v.total);
+                else {
+                    tot += v.total; cVentas++;
+                    if(v.metodo === 'Efectivo') efec += v.total;
+                    if(v.metodo === 'Tarjeta') tarj += v.total;
+                    if(v.metodo === 'Transferencia') trans += v.total;
+                }
+            });
+            const final = tot - ret;
+            const waText = `*CIERRE ${hoy}*%0A- Ventas: ${cVentas}%0A- Efec: $${efec}%0A- Tarj: $${tarj}%0A- Trans: $${trans}%0A- Retiros: -$${ret}%0A*TOTAL CAJA: $${final}*`;
+            document.getElementById('modalContent').innerHTML = `
+                <h3 class="text-center font-black uppercase mb-4 text-xl italic text-blue-500">Cierre</h3>
+                <div class="bg-black/40 p-4 rounded-2xl space-y-2 mb-6 font-bold text-sm">
+                    <div class="flex justify-between"><span>Ventas</span><span>$${tot}</span></div>
+                    <div class="flex justify-between text-red-500"><span>Retiros</span><span>-$${ret}</span></div>
+                    <div class="flex justify-between text-blue-400 text-xl font-black pt-2 border-t border-slate-800"><span>CAJA</span><span>$${final}</span></div>
+                </div>
+                <button onclick="window.open('https://wa.me/?text=${waText}')" class="w-full bg-green-600 py-4 rounded-2xl font-black mb-2 uppercase text-[10px]">WhatsApp</button>
+                <button onclick="window.cerrarModal()" class="w-full text-slate-500 font-black uppercase text-[10px]">Cerrar</button>`;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+        };
+
+        window.verRetiro = () => {
+            document.getElementById('modalContent').innerHTML = `
+                <h3 class="text-xl font-black uppercase text-center mb-6 text-red-500">Retiro</h3>
+                <input type="number" id="rMonto" placeholder="MONTO $" class="w-full bg-black border-2 border-red-900 p-5 rounded-3xl text-3xl text-center font-black mb-4 outline-none">
+                <input type="text" id="rMot" placeholder="MOTIVO" class="w-full bg-slate-800 p-4 rounded-xl mb-6 font-black uppercase text-xs">
+                <div class="flex gap-2">
+                    <button onclick="window.cerrarModal()" class="flex-1 bg-slate-800 py-4 rounded-2xl font-black uppercase text-[10px]">Cancelar</button>
+                    <button onclick="window.confirmarRetiro()" class="flex-[2] bg-red-600 py-4 rounded-2xl font-black uppercase text-[10px]">Confirmar</button>
+                </div>`;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+        };
+
+        window.confirmarRetiro = async () => {
+            const m = parseFloat(document.getElementById('rMonto').value);
+            const mot = document.getElementById('rMot').value.toUpperCase();
+            if(!m || !mot) return;
+            await setDoc(doc(db, "ventas", "R_"+Date.now()), { total: -m, metodo: "RETIRO", motivo: mot, vendedor: userActivo.nombre, fechaSimple: new Date().toISOString().split('T')[0], fecha: Timestamp.now() });
+            window.cerrarModal(); alert("Retiro OK");
+        };
+
+            window.finalizar = async () => {
+                if(!listaActual.length) return alert("CARRITO VACÍO");
+
+                const sub = listaActual.reduce((s, i) => s + (i.precio * i.cantidad), 0);
+                const porc = parseFloat(document.getElementById('descPorc').value) || 0;
+                const tot = sub - ((sub * porc) / 100);
+
+                try {
+                    const vId = (modo === 'venta' ? 'V_' : 'C_') + Date.now();
+
+                    // 1. Registrar la Venta en Firebase
+                    await setDoc(doc(db, "ventas", vId), { 
+                        items: listaActual, 
+                        total: tot, 
+                        metodo: document.getElementById('metodoPago').value, 
+                        vendedor: userActivo.nombre, 
+                        fechaSimple: new Date().toISOString().split('T')[0], 
+                        fecha: Timestamp.now() 
+                    });
+
+                    // 2. Lógica de Stock Inteligente
+                    for(const i of listaActual) {
+                        // Si el nombre empieza con "S-" (Servicio), NO descuenta stock
+                        if (!i.nombre.startsWith("S-")) {
+                            await updateDoc(doc(db, "productos", i.id), { 
+                                stock: increment(modo === 'venta' ? -i.cantidad : i.cantidad) 
+                            });
+                        } else {
+                            // Es un intangible, solo registramos la venta pero el stock no se toca
+                            console.log(`Servicio detectado: ${i.nombre}. Stock omitido.`);
+                        }
+                    }
+
+                    alert("OPERACIÓN EXITOSA"); 
+                    listaActual = []; 
+                    document.getElementById('descPorc').value = 0; 
+                    window.render();
+                } catch (e) { 
+                    console.error("Error en finalizar:", e);
+                    alert("ERROR DE RED O FIREBASE"); 
+                }
+            };
+
+        window.startCamera = () => {
+            document.getElementById('cameraSection').classList.remove('hidden');
+            if(!scanner) scanner = new Html5Qrcode("reader");
+            scanner.start({ facingMode: "environment" }, { fps: 15, qrbox: 250 }, async (code) => {
+                const id = code.trim();
+                const d = await getDoc(doc(db, "productos", id));
+                if(d.exists()) window.seleccionar(id); else window.crearNuevoP(id);
+                scanner.stop(); document.getElementById('cameraSection').classList.add('hidden');
+            });
+        };
+
+        window.crearNuevoP = (txt) => {
+            document.getElementById('modalContent').innerHTML = `
+                <h3 class="text-xl font-black uppercase text-blue-400 mb-4 text-center">Nuevo</h3>
+                <div class="space-y-4">
+                    <input type="text" id="nNom" placeholder="NOMBRE" class="w-full bg-slate-800 p-4 rounded-xl text-white font-black uppercase">
+                    <input type="number" id="nPre" placeholder="PRECIO $" class="w-full bg-slate-800 p-4 rounded-xl text-white font-black text-2xl">
+                    <button id="btnSave" class="w-full bg-green-600 py-5 rounded-2xl font-black uppercase">Guardar</button>
+                </div>`;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+            document.getElementById('btnSave').onclick = async () => {
+                const n = document.getElementById('nNom').value.toUpperCase().trim();
+                const p = parseFloat(document.getElementById('nPre').value);
+                if(!n || isNaN(p)) return;
+                await setDoc(doc(db, "productos", txt), { nombre: n, precio: p, stock: 0 });
+                window.cerrarModal(); window.seleccionar(txt);
+            };
+        };
+
+        window.onload = async () => {
+            const s = document.getElementById('selectUsuario');
+            s.innerHTML = '<option value="">CARGANDO...</option>';
+            const snap = await getDocs(query(collection(db, "usuarios"), where("estado", "==", "activo")));
+            s.innerHTML = '<option value="">-- OPERADOR --</option>';
+            snap.forEach(d => { s.innerHTML += `<option value="${d.id}">${d.data().nombre}</option>`; });
+        };
+        window.cantMod = (i, d) => { listaActual[i].cantidad += d; if(listaActual[i].cantidad <= 0) listaActual.splice(i, 1); window.render(); };
+        window.quitar = (i) => { listaActual.splice(i, 1); window.render(); };
+        window.cerrarModal = () => document.getElementById('modalUniversal').classList.add('hidden');
+        window.logout = () => location.reload();
+        window.setModo = (m) => { modo = m; listaActual = []; window.render(); 
+            document.getElementById('modeVenta').className = `flex-1 py-3 rounded-xl font-black text-[10px] uppercase ${modo==='venta'?'bg-blue-600 text-white':'text-slate-500'}`;
+            document.getElementById('modeCarga').className = `flex-1 py-3 rounded-xl font-black text-[10px] uppercase ${modo==='carga'?'bg-orange-600 text-white':'text-slate-500'}`;
+        };
+        async function registrarLog(accion) { if(userActivo) await setDoc(doc(db, "logs", "L_"+Date.now()), { usuario: userActivo.nombre, accion, fecha: Timestamp.now() }); }
+
+        window.verVentas = async () => {
+            const snap = await getDocs(query(collection(db, "ventas"), orderBy("fecha", "desc"), limit(20)));
+            let h = `<h3 class="text-xl font-black uppercase mb-6 text-center italic">Ventas</h3>`;
+            snap.forEach(d => {
+                const v = d.data();
+                h += `<div class="p-3 bg-black/40 border border-slate-800 rounded-xl mb-2 text-[10px]"><div class="flex justify-between font-black"><span class="${v.total < 0 ? 'text-red-500':'text-blue-400'}">${v.vendedor}</span><span>$${v.total}</span></div><div class="text-slate-500 font-bold uppercase">${v.metodo} ${v.motivo ? v.motivo:''}</div></div>`;
+            });
+            document.getElementById('modalContent').innerHTML = h + `<button onclick="window.cerrarModal()" class="w-full mt-4 text-slate-500 font-black uppercase text-[10px]">Cerrar</button>`;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+        };
+
+        window.verLogs = async () => {
+            const snap = await getDocs(query(collection(db, "logs"), orderBy("fecha", "desc"), limit(30)));
+            let h = `<h3 class="text-xl font-black uppercase mb-4 text-center italic text-purple-400">Logs</h3>`;
+            snap.forEach(d => {
+                const l = d.data();
+                h += `<div class="p-2 border-b border-slate-800 text-[9px] font-bold uppercase"><span class="text-blue-500">${l.usuario}</span>: ${l.accion}</div>`;
+            });
+            document.getElementById('modalContent').innerHTML = h + `<button onclick="window.cerrarModal()" class="w-full mt-4 text-slate-500 font-black uppercase text-[10px]">Cerrar</button>`;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+        };
+        window.verStaff = async () => { /* Logica staff previa */ };
+
+    </script>
+</body>
+</html>
