@@ -91,7 +91,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, doc, getDoc, updateDoc, increment, collection, getDocs, query, where, setDoc, deleteDoc, Timestamp, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, updateDoc, increment, collection, getDocs, query, where, setDoc, deleteDoc, Timestamp, orderBy, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCZTw6LbhfyC4tY9TPSz-Yb_jpfBPvGiKw",
@@ -104,6 +104,30 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
+        // 1. ESTO DEBE IR ARRIBA DE TODO (Justo después de 'const db...')
+        window.registrarLog = async (accion) => { 
+            if(typeof userActivo !== 'undefined' && userActivo) {
+                try {
+                    await setDoc(doc(db, "logs", "L_" + Date.now()), { 
+                        usuario: userActivo.nombre, 
+                        accion: accion, 
+                        fecha: Timestamp.now() 
+                    }); 
+                } catch (e) { console.error("Error Log:", e); }
+            } else {
+                console.warn("Intento de log sin usuario activo:", accion);
+            }
+        };
+        // --- SINCRONIZACIÓN EN TIEMPO REAL ---
+        let productosLocales = []; 
+
+        onSnapshot(collection(db, "productos"), (snap) => {
+            productosLocales = [];
+            snap.forEach(d => {
+                productosLocales.push({ id: d.id, ...d.data() });
+            });
+            console.log("✅ INVENTARIO SINCRONIZADO: " + productosLocales.length + " productos.");
+        });
 
         let userActivo = null;
         let listaActual = [];
@@ -239,7 +263,12 @@
             snap.forEach(d => prods.push({ id: d.id, ...d.data() }));
             prods.sort((a, b) => a.nombre.localeCompare(b.nombre));
             let h = crearHeader("Inventario");
-            h += `<input type="text" id="searchStock" oninput="window.filtrarStock()" placeholder="BUSCAR..." class="w-full bg-black border border-slate-700 p-4 rounded-2xl text-xs font-black mb-4 sticky top-[45px] z-40 text-white outline-none">`;
+            // Agregamos el botón de cámara al lado del buscador
+            h += `
+            <div class="flex gap-2 mb-4 sticky top-[45px] z-40 bg-slate-900 pb-2">
+                <button onclick="window.startCameraStock()" class="bg-blue-600 px-5 rounded-2xl text-white shadow-lg active:scale-90 transition-transform">📷</button>
+                <input type="text" id="searchStock" oninput="window.filtrarStock()" placeholder="BUSCAR O ESCANEAR..." class="flex-1 bg-black border border-slate-700 p-4 rounded-2xl text-xs font-black text-white outline-none">
+            </div>`;
             prods.forEach(p => {
                 let dTxt = "SIN VENTAS";
                 if(p.ultimaVenta) {
@@ -251,7 +280,7 @@
                         <div class="flex flex-col"><span class="text-[10px] font-black uppercase text-white">${p.nombre}</span><span class="text-[8px] font-mono text-slate-500">${p.id}</span></div>
                         <div class="flex flex-col items-end"><span class="font-black ${p.stock < 5 ? 'text-red-500':'text-green-500'} bg-black px-2 py-1 rounded-lg text-xs">${p.stock}</span><span class="text-[7px] font-black text-slate-600 mt-1 uppercase italic">${dTxt}</span></div>
                     </div>
-                    <div class="flex justify-between items-center"><span class="text-blue-400 font-black text-sm">$${p.precio}</span><div class="flex gap-1"><button onclick="window.editarPrecio('${p.id}', '${p.nombre}', ${p.precio})" class="text-[7px] font-black bg-blue-600/20 text-blue-400 px-2 py-1 rounded-lg">PRECIO</button>${userActivo.rol==='admin' ? `<button onclick="window.ajustarStock('${p.id}', '${p.nombre}', ${p.stock})" class="text-[7px] font-black bg-orange-600/20 text-orange-500 px-2 py-1 rounded-lg">AJUSTAR</button><button onclick="window.eliminarProducto('${p.id}')" class="text-[7px] font-black bg-red-600/20 text-red-500 px-2 py-1 rounded-lg">ELIMINAR</button>`:''}</div></div>
+                    <div class="flex justify-between items-center"><span class="text-blue-400 font-black text-sm">$${p.precio}</span><div class="flex gap-1"><button onclick="window.editarNombre('${p.id}', '${p.nombre}')" class="text-[7px] font-black bg-slate-600/20 text-slate-400 px-2 py-1 rounded-lg">NOMBRE</button><button onclick="window.editarPrecio('${p.id}', '${p.nombre}', ${p.precio})" class="text-[7px] font-black bg-blue-600/20 text-blue-400 px-2 py-1 rounded-lg">PRECIO</button>${userActivo.rol==='admin' ? `<button onclick="window.ajustarStock('${p.id}', '${p.nombre}', ${p.stock})" class="text-[7px] font-black bg-orange-600/20 text-orange-500 px-2 py-1 rounded-lg">AJUSTAR</button><button onclick="window.eliminarProducto('${p.id}')" class="text-[7px] font-black bg-red-600/20 text-red-500 px-2 py-1 rounded-lg">ELIMINAR</button>`:''}</div></div>
                 </div>`;
             });
             document.getElementById('modalContent').innerHTML = h;
@@ -278,41 +307,53 @@
             }
         };
 
-        window.buscarProducto = async () => {
+        window.buscarProducto = () => {
             const txt = document.getElementById('manualInput').value.toUpperCase();
-            if(txt.length < 2) { document.getElementById('resultadosBusqueda').classList.add('hidden'); return; }
-            const snap = await getDocs(collection(db, "productos"));
+            const div = document.getElementById('resultadosBusqueda');
+            if(txt.length < 2) { div.classList.add('hidden'); return; }
+
             let h = "";
-            snap.forEach(d => {
-                if(d.id.includes(txt) || d.data().nombre.includes(txt)) {
-                    h += `<div onclick="window.seleccionar('${d.id}')" class="p-4 border-b border-slate-700 font-black text-xs uppercase active:bg-blue-600 text-white">${d.data().nombre}</div>`;
+            productosLocales.forEach(p => {
+                if(p.id.includes(txt) || (p.nombre && p.nombre.includes(txt))) {
+                    h += `<div onclick="window.seleccionar('${p.id}')" class="p-4 border-b border-slate-700 font-black text-xs uppercase active:bg-blue-600 text-white">${p.nombre}</div>`;
                 }
             });
-            const div = document.getElementById('resultadosBusqueda');
-            div.innerHTML = h + `<button onclick="window.crearNuevoP('${txt}')" class="p-4 text-blue-400 font-black text-[10px] uppercase w-full text-left">+ CREAR: ${txt}</button><button onclick="window.crearNuevoP('INT-${Date.now()}')" class="p-4 text-orange-400 font-black text-[10px] uppercase w-full text-left">+ PRODUCTO SIN CÓDIGO</button>`;
+
+            div.innerHTML = h + `<button onclick="window.crearNuevoP('${txt}')" class="p-4 text-blue-400 font-black text-[10px] uppercase w-full text-left">+ CREAR: ${txt}</button>`;
             div.classList.remove('hidden');
         };
 
-        window.seleccionar = async (id) => {
-            const d = await getDoc(doc(db, "productos", id));
-            if(!d.exists()) return;
-            const p = d.data();
+        window.seleccionar = (id) => {
+            const p = productosLocales.find(item => item.id === id);
+            if(!p) {
+                // Si no está en memoria, quizás es nuevo
+                window.crearNuevoP(id);
+                return;
+            }
+
             document.getElementById('manualInput').value = ""; 
             document.getElementById('resultadosBusqueda').classList.add('hidden');
             document.getElementById('modalContent').innerHTML = crearHeader(modo==='venta'?'Vender':'Carga') + `
                 <h3 class="text-center font-black uppercase text-blue-400 mb-4 italic">${p.nombre}</h3>
-                <input type="number" id="cantInp" class="w-full bg-black text-white text-6xl p-6 rounded-3xl border-2 ${modo==='venta'?'border-blue-600':'border-orange-600'} text-center mb-6 font-black outline-none">
-                <button id="btnConf" class="w-full ${modo==='venta'?'bg-blue-600':'bg-orange-600'} py-5 rounded-2xl font-black uppercase">Confirmar</button>`;
+                <input type="number" id="cantInp" inputmode="numeric" pattern="[0-9]*" class="w-full bg-black text-white text-6xl p-6 rounded-3xl border-2 ${modo==='venta'?'border-blue-600':'border-orange-600'} text-center mb-6 font-black outline-none">
+                <button id="btnConfItem" class="w-full ${modo==='venta'?'bg-blue-600':'bg-orange-600'} py-5 rounded-2xl font-black uppercase">Confirmar</button>`;
+
             document.getElementById('modalUniversal').classList.remove('hidden');
-            document.getElementById('cantInp').focus();
-            document.getElementById('btnConf').onclick = () => {
-                const c = parseInt(document.getElementById('cantInp').value);
+
+            const input = document.getElementById('cantInp');
+            setTimeout(() => input.focus(), 300);
+
+            const procesar = () => {
+                const c = parseInt(input.value);
                 if(c > 0) {
                     const ex = listaActual.find(it => it.id === id);
                     if(ex) ex.cantidad += c; else listaActual.push({id, nombre: p.nombre, precio: p.precio, cantidad: c});
                     window.render(); window.cerrarModal();
                 }
             };
+
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') procesar(); });
+            document.getElementById('btnConfItem').onclick = procesar;
         };
 
         window.render = () => {
@@ -408,7 +449,7 @@
         window.filtrarStock = () => { const t = document.getElementById('searchStock').value.toUpperCase(); document.querySelectorAll('.item-stock').forEach(i => { i.style.display = (i.dataset.nombre.includes(t) || i.dataset.id.includes(t)) ? 'flex':'none'; }); };
         window.cantMod = (i, d) => { listaActual[i].cantidad += d; if(listaActual[i].cantidad <= 0) listaActual.splice(i,1); window.render(); };
         window.quitar = (i) => { listaActual.splice(i,1); window.render(); };
-        window.startCamera = () => {
+       window.startCamera = () => {
             document.getElementById('cameraSection').classList.remove('hidden');
             scanner = new Html5Qrcode("reader");
             scanner.start(
@@ -419,17 +460,55 @@
                     await scanner.stop();
                     scanner = null;
                     document.getElementById('cameraSection').classList.add('hidden');
-                    const d = await getDoc(doc(db, "productos", id));
-                    if (d.exists()) window.seleccionar(id);
-                    else window.crearNuevoP(id);
+                    window.seleccionar(id);
                 }
             ).catch(err => console.error(err));
         };
+        window.startCameraStock = () => {
+            document.getElementById('modalUniversal').classList.add('hidden');
+            document.getElementById('cameraSection').classList.remove('hidden');
 
-        window.seleccionar = async (id) => {
-            const d = await getDoc(doc(db, "productos", id));
-            if (!d.exists()) return;
-            const p = d.data();
+            scanner = new Html5Qrcode("reader");
+            scanner.start(
+                { facingMode: "environment" },
+                { fps: 15, qrbox: 250 },
+                async (c) => {
+                    const id = c.trim();
+                    await scanner.stop();
+                    scanner = null;
+                    document.getElementById('cameraSection').classList.add('hidden');
+
+                    // Reabre el stock para mostrar los cambios
+                    await window.verStock();
+
+                    const searchInput = document.getElementById('searchStock');
+                    if(searchInput) {
+                        searchInput.value = id; // Pone el código en el buscador
+                        window.filtrarStock();  // Filtra la lista instantáneamente
+
+                        // --- ESTO ES LO NUEVO: Busca el producto y lo pone frente a tus ojos ---
+                        setTimeout(() => {
+                            const elemento = document.querySelector(`[data-id="${id}"]`);
+                            if(elemento) {
+                                elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                elemento.classList.add('ring-2', 'ring-blue-500', 'duration-500'); // Resalta el producto
+                            }
+                        }, 300);
+                    }
+                }
+            ).catch(err => {
+                console.error(err);
+                document.getElementById('modalUniversal').classList.remove('hidden');
+            });
+        };
+        
+        window.seleccionar = (id) => {
+            const p = productosLocales.find(item => item.id === id);
+            if (!p) {
+                window.crearNuevoP(id);
+                return;
+            }
+
             document.getElementById('manualInput').value = ""; 
             document.getElementById('resultadosBusqueda').classList.add('hidden');
             document.getElementById('modalContent').innerHTML = crearHeader(modo==='venta'?'Vender':'Carga') + `
@@ -439,7 +518,7 @@
             document.getElementById('modalUniversal').classList.remove('hidden');
 
             const input = document.getElementById('cantInp');
-            setTimeout(() => input.focus(), 100); // Pequeño delay para asegurar el focus en móviles
+            setTimeout(() => input.focus(), 200);
 
             const procesar = () => {
                 const c = parseInt(input.value);
@@ -454,7 +533,6 @@
             document.getElementById('btnConfItem').onclick = procesar;
         };
 
-        // --- NUEVAS FUNCIONES DE ANÁLISIS ---
         window.verMetricas = async () => {
             const hoy = new Date();
             const mesActual = hoy.getMonth();
@@ -516,12 +594,14 @@
 
         window.onload = async () => {
             const s = document.getElementById('selectUsuario');
-            const snap = await getDocs(query(collection(db, "usuarios"), where("estado", "==", "activo")));
-            s.innerHTML = '<option value="">-- OPERADOR --</option>';
-            snap.forEach(d => { s.innerHTML += `<option value="${d.id}">${d.data().nombre}</option>`; });
+            try {
+                const snap = await getDocs(query(collection(db, "usuarios"), where("estado", "==", "activo")));
+                s.innerHTML = '<option value="">-- OPERADOR --</option>';
+                snap.forEach(d => { s.innerHTML += `<option value="${d.id}">${d.data().nombre}</option>`; });
+            } catch (e) { console.error("Error inicial:", e); }
 
-            // Listener para actualizar descuentos al cambiar método de pago
-            document.getElementById('metodoPago').addEventListener('change', () => window.render());
+            const mp = document.getElementById('metodoPago');
+            if(mp) mp.addEventListener('change', () => window.render());
         };
     </script>
 </body>
