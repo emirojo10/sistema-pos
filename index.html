@@ -74,14 +74,15 @@
                 </select>
             </div>
 
-            <button id="btnConfirmar" onclick="window.finalizar()" class="w-full bg-green-600 py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-transform">Confirmar</button>
+            <button id="btnConfirmar" onclick="window.finalizar()" class="w-full bg-green-600 py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-transform">Confirmar</button><button id="btnPendiente" onclick="window.guardarPendiente()" class="w-full bg-amber-600 py-3 rounded-2xl font-black uppercase text-xs mb-2 shadow-lg active:scale-95">⏳ Guardar como Pendiente</button>
         </div>
 
-        <div class="fixed bottom-6 left-4 right-4 max-w-md mx-auto grid grid-cols-4 gap-2 bg-slate-900/90 backdrop-blur p-3 rounded-[2rem] border border-slate-800 shadow-2xl text-[8px] font-black uppercase text-center text-slate-500">
-            <button onclick="window.verCierre()" class="py-2 active:text-white">Cierre</button>
-            <button onclick="window.verVentas()" class="py-2 active:text-white">Ventas</button>
-            <button onclick="window.verRetiro()" class="py-2 active:text-white">Retiro</button>
-            <button onclick="window.verStock()" class="py-2 active:text-white">Stock</button>
+        <div class="fixed bottom-6 left-2 right-2 max-w-md mx-auto grid grid-cols-5 gap-1 bg-slate-900/95 backdrop-blur-xl p-2 rounded-[2rem] border border-slate-800 shadow-2xl text-[7px] font-black uppercase text-center text-slate-500 z-[150]">
+            <button onclick="window.verCierre()" class="py-2 active:text-white flex flex-col items-center"><span>📊</span>Cierre</button>
+            <button onclick="window.verVentas()" class="py-2 active:text-white flex flex-col items-center"><span>📝</span>Ventas</button>
+            <button onclick="window.verPedidos()" class="py-2 text-amber-500 active:text-white flex flex-col items-center"><span>⏳</span>Pedidos</button>
+            <button onclick="window.verRetiro()" class="py-2 active:text-white flex flex-col items-center"><span>💸</span>Retiro</button>
+            <button onclick="window.verStock()" class="py-2 active:text-white flex flex-col items-center"><span>📦</span>Stock</button>
         </div>
     </div>
 
@@ -116,6 +117,28 @@
                 } catch (e) { console.error("Error Log:", e); }
             } else {
                 console.warn("Intento de log sin usuario activo:", accion);
+            }
+        };
+        window.guardarPendiente = async () => {
+            if(!listaActual.length) return alert("LISTA VACÍA");
+            const cliente = prompt("NOMBRE DEL CLIENTE / REFERENCIA:").toUpperCase();
+            if(!cliente) return;
+
+            try {
+                const pedidoId = "P_" + Date.now();
+                await setDoc(doc(db, "pedidos", pedidoId), {
+                    cliente,
+                    items: listaActual,
+                    vendedor: userActivo.nombre,
+                    fecha: Timestamp.now(),
+                    totalEstimado: listaActual.reduce((s, i) => s + (i.precio * i.cantidad), 0)
+                });
+
+                alert("PEDIDO GUARDADO PARA: " + cliente);
+                listaActual = []; // Limpiamos la pantalla
+                window.render();
+            } catch (e) {
+                alert("ERROR AL GUARDAR");
             }
         };
         // --- SINCRONIZACIÓN EN TIEMPO REAL ---
@@ -241,6 +264,7 @@
                 </div>
             </div>
             <button id="btnD" class="w-full bg-slate-700 py-4 rounded-2xl font-black uppercase text-[10px] mb-2">Descargar Reporte CSV</button>
+            <button onclick="window.verPedidos()" class="py-2 active:text-white">Pedidos</button>
             <button onclick="window.compartirCierre('${hoy}', ${stats.tBruto}, ${totalCajaEfectivo}, ${stats.cVentas})" class="w-full bg-green-600 py-4 rounded-2xl font-black uppercase text-[10px]">Enviar Resumen WhatsApp</button>
             `;
             
@@ -251,7 +275,52 @@
             };
             document.getElementById('modalUniversal').classList.remove('hidden');
         };
+        window.verPedidos = async () => {
+            const snap = await getDocs(query(collection(db, "pedidos"), orderBy("fecha", "desc")));
+            let h = crearHeader("Pedidos Pendientes");
 
+            if(snap.empty) h += `<p class="text-center text-slate-500 py-10 font-black">NO HAY PENDIENTES</p>`;
+
+            snap.forEach(d => {
+                const p = d.data();
+                h += `
+                <div class="p-4 bg-black/40 border border-amber-600/30 rounded-2xl mb-3">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="font-black text-amber-500">${p.cliente}</span>
+                        <span class="text-[10px] text-slate-500">${p.fecha.toDate().toLocaleTimeString()}</span>
+                    </div>
+                    <div class="text-[9px] text-slate-400 mb-3">
+                        ${p.items.map(it => `${it.cantidad}x ${it.nombre}`).join('<br>')}
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="window.cargarPedido('${d.id}')" class="flex-1 bg-green-600 py-2 rounded-xl font-black text-[10px] uppercase">Cobrar Ahora</button>
+                        <button onclick="window.eliminarPedido('${d.id}')" class="bg-red-600/20 text-red-500 px-3 rounded-xl">✕</button>
+                    </div>
+                </div>`;
+            });
+
+            document.getElementById('modalContent').innerHTML = h;
+            document.getElementById('modalUniversal').classList.remove('hidden');
+        };
+
+        window.cargarPedido = async (id) => {
+            const docRef = doc(db, "pedidos", id);
+            const snap = await getDoc(docRef);
+            if(snap.exists()) {
+                listaActual = snap.data().items; // Cargamos los items al carrito principal
+                window.render();
+                window.cerrarModal();
+                await deleteDoc(docRef); // Borramos el pendiente para que no se duplique
+                alert("PEDIDO CARGADO. SELECCIONA MÉTODO DE PAGO Y CONFIRMA.");
+            }
+        };
+
+        window.eliminarPedido = async (id) => {
+            if(confirm("¿ELIMINAR ESTE PEDIDO PENDIENTE?")) {
+                await deleteDoc(doc(db, "pedidos", id));
+                window.verPedidos();
+            }
+        };
         window.compartirCierre = (fecha, bruto, real, cant) => {
             const txt = `*RESUMEN DE CIERRE* 📊%0A📅 Fecha: ${fecha}%0A💰 Venta Bruta: $${bruto}%0A💵 Efectivo Caja: $${real}%0A🛍️ Cant. Ventas: ${cant}%0A-------------------`;
             window.open(`https://wa.me/?text=${txt}`);
