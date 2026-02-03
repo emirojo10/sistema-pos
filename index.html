@@ -105,6 +105,21 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
+        window.editarNombre = async (id, nombreActual) => {
+            const nuevo = prompt("EDITAR NOMBRE DEL PRODUCTO:", nombreActual);
+            if (nuevo && nuevo.trim() !== "" && nuevo.toUpperCase() !== nombreActual.toUpperCase()) {
+                try {
+                    await updateDoc(doc(db, "productos", id), { 
+                        nombre: nuevo.trim().toUpperCase() 
+                    });
+                    alert("NOMBRE ACTUALIZADO");
+                    window.verStock(); // Esto refresca la lista
+                } catch (e) {
+                    console.error("Error:", e);
+                    alert("ERROR AL GUARDAR");
+                }
+            }
+        };
         // 1. ESTO DEBE IR ARRIBA DE TODO (Justo después de 'const db...')
         window.registrarLog = async (accion) => { 
             if(typeof userActivo !== 'undefined' && userActivo) {
@@ -214,14 +229,13 @@
         };
 
         window.verCierre = async () => {
-            const hoy = new Date().toISOString().split('T')[0];
+            // CORRECCIÓN DE HORA: Fuerza la fecha de Mendoza, Argentina
+            const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Mendoza' });
+
             const q = query(collection(db, "ventas"), where("fechaSimple", "==", hoy));
             const snap = await getDocs(q);
-            
-            let stats = { 
-                Efectivo: 0, Tarjeta: 0, Transferencia: 0, Retiros: 0, 
-                cVentas: 0, cRetiros: 0, tBruto: 0 
-            };
+
+            let stats = { Efectivo: 0, Tarjeta: 0, Transferencia: 0, Retiros: 0, cVentas: 0, cRetiros: 0, tBruto: 0 };
             let csv = "Fecha,Folio,Vendedor,Metodo,Total\n";
 
             snap.forEach(d => {
@@ -238,7 +252,6 @@
             });
 
             const totalCajaEfectivo = stats.Efectivo - stats.Retiros;
-
             let h = crearHeader("Cierre Diario: " + hoy);
             h += `
             <div class="space-y-3 mb-6">
@@ -249,25 +262,17 @@
                     </div>
                     <div class="bg-black/40 p-3 rounded-2xl border border-slate-800">
                         <p class="text-[8px] text-slate-500 font-black uppercase">Venta Bruta</p>
-                        <p class="text-xl font-black text-white">$${stats.tBruto.toLocaleString()}</p>
+                        <p class="text-xl font-black text-white">$ ${stats.tBruto.toLocaleString()}</p>
                     </div>
-                </div>
-                <div class="bg-slate-800/20 p-4 rounded-2xl border border-slate-800 space-y-2">
-                    <div class="flex justify-between text-[10px] font-bold"><span>💵 EFECTIVO</span><span class="text-white">$${stats.Efectivo.toLocaleString()}</span></div>
-                    <div class="flex justify-between text-[10px] font-bold"><span>💳 TARJETA</span><span class="text-white">$${stats.Tarjeta.toLocaleString()}</span></div>
-                    <div class="flex justify-between text-[10px] font-bold"><span>📲 TRANSF.</span><span class="text-white">$${stats.Transferencia.toLocaleString()}</span></div>
-                    <div class="flex justify-between text-[10px] font-bold text-red-500 border-t border-slate-800 pt-2"><span>📉 RETIROS (${stats.cRetiros})</span><span>-$${stats.Retiros.toLocaleString()}</span></div>
                 </div>
                 <div class="bg-green-600/10 p-4 rounded-3xl border border-green-600/30 text-center">
                     <p class="text-[9px] text-green-500 font-black uppercase tracking-widest">Efectivo Real en Caja</p>
-                    <p class="text-4xl font-black text-green-500 italic">$${totalCajaEfectivo.toLocaleString()}</p>
+                    <p class="text-4xl font-black text-green-500 italic">$ ${totalCajaEfectivo.toLocaleString()}</p>
                 </div>
             </div>
             <button id="btnD" class="w-full bg-slate-700 py-4 rounded-2xl font-black uppercase text-[10px] mb-2">Descargar Reporte CSV</button>
-            <button onclick="window.verPedidos()" class="py-2 active:text-white">Pedidos</button>
-            <button onclick="window.compartirCierre('${hoy}', ${stats.tBruto}, ${totalCajaEfectivo}, ${stats.cVentas})" class="w-full bg-green-600 py-4 rounded-2xl font-black uppercase text-[10px]">Enviar Resumen WhatsApp</button>
-            `;
-            
+            <button onclick="window.compartirCierre('${hoy}', ${stats.tBruto}, ${totalCajaEfectivo}, ${stats.cVentas})" class="w-full bg-green-600 py-4 rounded-2xl font-black uppercase text-[10px]">Enviar Resumen WhatsApp</button>`;
+
             document.getElementById('modalContent').innerHTML = h;
             document.getElementById('btnD').onclick = () => {
                 const blob = new Blob(["\ufeff"+csv], {type:'text/csv;charset=utf-8;'});
